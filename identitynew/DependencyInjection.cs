@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text;
 using FluentValidation;
 using identitynew.Interfaces;
@@ -6,9 +6,6 @@ using identitynew.Interfaces.Auth;
 using identitynew.Models;
 using identitynew.Repositories;
 using identitynew.Services;
-//using Jose;
-
-//using Jose;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -30,7 +27,7 @@ namespace identitynew
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = true;
                 options.Password.RequiredLength = 8;
-                options.Password.RequiredUniqueChars = 4;
+                options.Password.RequiredUniqueChars = 2;
 
                 // Lockout settings
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
@@ -41,8 +38,8 @@ namespace identitynew
                 options.User.RequireUniqueEmail = true;
                 options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
 
-                // Sign-in settings
-                options.SignIn.RequireConfirmedEmail = true;
+                // Sign-in settings (set RequireConfirmedEmail = false since confirmation emails are not sent)
+                options.SignIn.RequireConfirmedEmail = false;
                 options.SignIn.RequireConfirmedAccount = false;
             })
             .AddEntityFrameworkStores<AppDbContext>()

@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Text;
 using AutoMapper;
 using identitynew.Dtos;
@@ -52,8 +52,11 @@ namespace identitynew.Services
         //Login User
         public async Task<LoginResponse> LoginAsync(LoginDto loginDto)
         {
-            var user = await userManager.FindByEmailAsync(loginDto.Email);
-            if (user is null) return LoginResponse.Failure("Invalid email .");
+            var email = loginDto.Email?.Trim();
+            if (string.IsNullOrEmpty(email)) return LoginResponse.Failure("Invalid email or password.");
+
+            var user = await userManager.FindByEmailAsync(email);
+            if (user is null) return LoginResponse.Failure("Invalid email or password.");
 
             if (!user.IsActive) return LoginResponse.Failure("User account is deactivated.");
 
@@ -72,7 +75,7 @@ namespace identitynew.Services
 
             if (!result.Succeeded)
             {
-                return LoginResponse.Failure("Invalid  password.");
+                return LoginResponse.Failure("Invalid email or password.");
             }
 
             return await GenerateAuthTokensAsync(user);

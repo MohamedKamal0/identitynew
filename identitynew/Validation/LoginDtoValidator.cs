@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using identitynew.Dtos;
 
 namespace identitynew.Validation
