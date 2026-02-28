@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -30,7 +30,8 @@ namespace identitynew.Services
               new Claim(ClaimTypes.NameIdentifier  ,user.Id),
               new Claim(ClaimTypes.Email  ,user.Email!),
               new Claim("FirstName" , user.FirstName!),
-              new Claim("LastName" , user.LastName!)
+              new Claim("LastName" , user.LastName!),
+              new Claim("security_stamp", user.SecurityStamp ?? string.Empty) // For Single Device Login - invalidates old tokens
             };
 
             foreach (var role in roles)

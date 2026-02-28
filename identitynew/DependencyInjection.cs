@@ -71,6 +71,31 @@ namespace identitynew
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("SecretKey") ?? jwtSettings.SecretKey)),
                     ClockSkew = TimeSpan.Zero
                 };
+                // Single Device Login: Reject tokens with outdated SecurityStamp (logged in from another device)
+                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+                        var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                        if (string.IsNullOrEmpty(userId)) return;
+
+                        var user = await userManager.FindByIdAsync(userId);
+                        if (user is null)
+                        {
+                            context.Fail("User not found.");
+                            return;
+                        }
+
+                        var stampFromToken = context.Principal?.FindFirst("security_stamp")?.Value;
+                        var currentStamp = user.SecurityStamp ?? string.Empty;
+                        // Reject if token lacks stamp (legacy) or stamp doesn't match (logged in elsewhere)
+                        if (stampFromToken != currentStamp)
+                        {
+                            context.Fail("Token has been revoked. Please log in again.");
+                        }
+                    }
+                };
             });
 
             // Configure Authorization Policies

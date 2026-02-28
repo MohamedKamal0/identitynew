@@ -200,10 +200,14 @@ namespace identitynew.Services
         //Private Methods
         private async Task<LoginResponse> GenerateAuthTokensAsync(AppUser user)
         {
+            // Single Device Login: Revoke all previous sessions and invalidate old tokens
+            await userManager.UpdateSecurityStampAsync(user);
+            await RevokeAllRefreshTokensForUserAsync(user.Id);
+
             var roles = await userManager.GetRolesAsync(user);
+            user = await userManager.FindByIdAsync(user.Id) ?? user; // Reload to get new SecurityStamp
             var accessToken = await tokenService.GenerateAccessTokenAsync(user, roles);
             var refreshToken = tokenService.GenerateRefreshToken();
-
 
             var refreshTokenrow = new RefreshToken
             {
@@ -223,6 +227,20 @@ namespace identitynew.Services
                 tokenService.GetRefreshTokenExpiration(),
                  refreshToken,
                 roles);
+        }
+
+        /// <summary>
+        /// Revokes all refresh tokens for a user (Single Device Login - invalidates old devices).
+        /// </summary>
+        private async Task RevokeAllRefreshTokensForUserAsync(string userId)
+        {
+            var spec = new RefreshTokenSpecification(rt => rt.UserId == userId);
+            var refreshTokens = await unitOfWork.Repository<RefreshToken>().GetAllWithSpec(spec);
+            foreach (var token in refreshTokens)
+            {
+                token.IsRevoked = true;
+                token.RevokedAt = DateTime.UtcNow;
+            }
         }
 
 
