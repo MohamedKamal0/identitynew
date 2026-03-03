@@ -4,49 +4,74 @@ using System.Security.Cryptography;
 using System.Text;
 using identitynew.Interfaces.Auth;
 using identitynew.Models;
-//using Jose;
-
-//using Jose;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+
 namespace identitynew.Services
 {
     public class TokenService : ITokenService
     {
         private readonly JwtSettings jwtSettings;
         private readonly ILogger<TokenService> logger;
-        public TokenService(IOptions<JwtSettings> options, ILogger<TokenService> _logger)
+        private readonly IHttpContextAccessor httpContextAccessor;
+        private readonly IDeviceFingerprintService deviceFingerprintService;
+
+        public TokenService(
+            IOptions<JwtSettings> options,
+            ILogger<TokenService> _logger,
+            IHttpContextAccessor httpContextAccessor,
+            IDeviceFingerprintService deviceFingerprintService)
         {
             jwtSettings = options.Value;
             logger = _logger;
+            this.httpContextAccessor = httpContextAccessor;
+            this.deviceFingerprintService = deviceFingerprintService;
         }
+
         public Task<string> GenerateAccessTokenAsync(AppUser user, IList<string> roles)
         {
-            var Claims = new List<Claim>
+            var claims = new List<Claim>
             {
-              new Claim(JwtRegisteredClaimNames.Sub , user.Id ),
-              new Claim(JwtRegisteredClaimNames.Email , user.Email ?? string.Empty),
-              new Claim(JwtRegisteredClaimNames.Jti ,  Guid.NewGuid().ToString()),
-              new Claim(ClaimTypes.NameIdentifier  ,user.Id),
-              new Claim(ClaimTypes.Email  ,user.Email!),
-              new Claim("FirstName" , user.FirstName!),
-              new Claim("LastName" , user.LastName!),
-              new Claim("security_stamp", user.SecurityStamp ?? string.Empty) // For Single Device Login - invalidates old tokens
+                new Claim(JwtRegisteredClaimNames.Sub , user.Id ),
+                new Claim(JwtRegisteredClaimNames.Email , user.Email ?? string.Empty),
+                new Claim(JwtRegisteredClaimNames.Jti ,  Guid.NewGuid().ToString()),
+                new Claim(ClaimTypes.NameIdentifier  ,user.Id),
+                new Claim(ClaimTypes.Email  ,user.Email!),
+                new Claim("FirstName" , user.FirstName!),
+                new Claim("LastName" , user.LastName!),
+                new Claim("security_stamp", user.SecurityStamp ?? string.Empty) // For Single Device Login - invalidates old tokens
             };
+
+            // Device fingerprinting: bind token to current device
+            try
+            {
+                var httpContext = httpContextAccessor.HttpContext;
+                if (httpContext != null)
+                {
+                    var fingerprint = deviceFingerprintService.GetFingerprint(httpContext);
+                    claims.Add(new Claim("device_fingerprint", fingerprint));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to generate device fingerprint. Continuing without fingerprint claim.");
+            }
 
             foreach (var role in roles)
             {
-                Claims.Add(new Claim(ClaimTypes.Role, role));
+                claims.Add(new Claim(ClaimTypes.Role, role));
             }
+
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("SecretKey") ?? jwtSettings.SecretKey));
             var credential = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(
-           issuer: jwtSettings.Issuer,
-           audience: jwtSettings.Audience,
-           claims: Claims,
-           expires: GetAccessTokenExpiration(),
-           signingCredentials: credential
-       );
+                issuer: jwtSettings.Issuer,
+                audience: jwtSettings.Audience,
+                claims: claims,
+                expires: GetAccessTokenExpiration(),
+                signingCredentials: credential
+            );
             var writeToken = new JwtSecurityTokenHandler().WriteToken(token);
             return Task.FromResult(writeToken);
         }

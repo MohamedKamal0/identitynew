@@ -71,12 +71,15 @@ namespace identitynew
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("SecretKey") ?? jwtSettings.SecretKey)),
                     ClockSkew = TimeSpan.Zero
                 };
-                // Single Device Login: Reject tokens with outdated SecurityStamp (logged in from another device)
+                // Single Device Login & Device Fingerprinting: reject tokens with outdated SecurityStamp or mismatched device
                 options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
                 {
                     OnTokenValidated = async context =>
                     {
-                        var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+                        var services = context.HttpContext.RequestServices;
+                        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+                        var fingerprintService = services.GetRequiredService<IDeviceFingerprintService>();
+
                         var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                         if (string.IsNullOrEmpty(userId)) return;
 
@@ -87,12 +90,29 @@ namespace identitynew
                             return;
                         }
 
+                        // Single-device: SecurityStamp must match
                         var stampFromToken = context.Principal?.FindFirst("security_stamp")?.Value;
                         var currentStamp = user.SecurityStamp ?? string.Empty;
-                        // Reject if token lacks stamp (legacy) or stamp doesn't match (logged in elsewhere)
                         if (stampFromToken != currentStamp)
                         {
                             context.Fail("Token has been revoked. Please log in again.");
+                            return;
+                        }
+
+                        // Device fingerprint: must match current request's device
+                        try
+                        {
+                            var currentFingerprint = fingerprintService.GetFingerprint(context.HttpContext);
+                            var fingerprintFromToken = context.Principal?.FindFirst("device_fingerprint")?.Value;
+
+                            if (string.IsNullOrEmpty(fingerprintFromToken) || fingerprintFromToken != currentFingerprint)
+                            {
+                                context.Fail("Token does not match this device.");
+                            }
+                        }
+                        catch
+                        {
+                            context.Fail("Could not validate device fingerprint.");
                         }
                     }
                 };
@@ -111,6 +131,7 @@ namespace identitynew
             services.AddScoped<IUnitOfWork, UnitOfWorkClass>();
             services.AddScoped<ITokenService, TokenService>();
             services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IDeviceFingerprintService, DeviceFingerprintService>();
             //services.AddScoped<IRoleService, RoleService>();
 
             services.AddSwaggerGen(c =>
